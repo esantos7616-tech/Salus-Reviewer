@@ -92,7 +92,7 @@ export async function getAccessToken(): Promise<string> {
     expires_at: Date.now() + data.expires_in * 1000,
   };
 
-  return cachedToken.access_token;
+  return cachedToken!.access_token;
 }
 
 async function salusRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
