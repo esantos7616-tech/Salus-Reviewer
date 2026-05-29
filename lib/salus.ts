@@ -26,6 +26,8 @@ export interface FormInstance {
   fields?: FormField[];
   completion_percentage?: number;
   missing_fields?: string[];
+  corrective_action_count?: number;
+  created_by?: string;
 }
 
 export interface FormField {
@@ -64,6 +66,7 @@ export async function getAccessToken(): Promise<string> {
     throw new Error("SALUS_CLIENT_ID and SALUS_CLIENT_SECRET must be set in environment variables.");
   }
 
+  // Return cached token if still valid (with 60s buffer)
   if (cachedToken && Date.now() < cachedToken.expires_at - 60000) {
     return cachedToken.access_token;
   }
@@ -132,6 +135,8 @@ function normalizeForm(raw: any): FormInstance {
     fields: raw.fields,
     completion_percentage: raw.completion_percentage,
     missing_fields: raw.missing_fields,
+    corrective_action_count: raw.correctiveActionCount ?? raw.corrective_action_count ?? 0,
+    created_by: raw.createdByUser ?? raw.created_by ?? undefined,
   };
 }
 
@@ -139,7 +144,9 @@ function normalizeForm(raw: any): FormInstance {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractForms(data: any): FormInstance[] {
   if (!data) return [];
+  // Array of form objects
   if (Array.isArray(data)) return data.map(normalizeForm);
+  // Paginated: { results: [...] }
   if (Array.isArray(data.results)) return data.results.map(normalizeForm);
   if (Array.isArray(data.data)) return data.data.map(normalizeForm);
   if (Array.isArray(data.items)) return data.items.map(normalizeForm);
@@ -218,6 +225,7 @@ export function analyzeFormCompletion(form: FormInstance): {
   missingFields: string[];
   status: "complete" | "incomplete" | "pending";
 } {
+  // If the form has detailed field data, use it
   if (form.fields && form.fields.length > 0) {
     const requiredFields = form.fields.filter((f) => f.required);
     const missingFields = requiredFields
@@ -237,6 +245,7 @@ export function analyzeFormCompletion(form: FormInstance): {
     };
   }
 
+  // Fall back to status-based assessment
   const statusLower = (form.status || "").toLowerCase();
   if (statusLower === "submitted" || statusLower === "completed" || statusLower === "approved") {
     return { isComplete: true, completionPercentage: 100, missingFields: [], status: "complete" };
