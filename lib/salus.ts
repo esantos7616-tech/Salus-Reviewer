@@ -118,10 +118,10 @@ async function salusRequest<T>(endpoint: string, options: RequestInit = {}): Pro
 // Fetch all public access entries (forms assigned to sites)
 export async function getPublicAccessForms(): Promise<PublicAccessEntry[]> {
   try {
-    const data = await salusRequest<{ results: PublicAccessEntry[]; count: number }>(
-      "/v1/public-access/"
-    );
-    return data.results || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await salusRequest<any>("/v1/public-access/");
+    if (Array.isArray(data)) return data;
+    return data?.results || data?.data || data?.items || [];
   } catch {
     return [];
   }
@@ -151,7 +151,12 @@ export async function getFormInstances(params?: {
 
   const endpoint = `/v1/form-instance/${query.toString() ? "?" + query.toString() : ""}`;
   try {
-    return await salusRequest<{ results: FormInstance[]; count: number }>(endpoint);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await salusRequest<any>(endpoint);
+    // Handle different response shapes from the SALUS API
+    if (Array.isArray(data)) return { results: data, count: data.length };
+    const results = data?.results ?? data?.data ?? data?.items ?? data?.form_instances ?? [];
+    return { results: Array.isArray(results) ? results : [], count: data?.count ?? data?.total ?? results.length };
   } catch {
     return { results: [], count: 0 };
   }
