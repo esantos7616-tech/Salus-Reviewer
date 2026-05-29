@@ -64,7 +64,6 @@ export async function getAccessToken(): Promise<string> {
     throw new Error("SALUS_CLIENT_ID and SALUS_CLIENT_SECRET must be set in environment variables.");
   }
 
-  // Return cached token if still valid (with 60s buffer)
   if (cachedToken && Date.now() < cachedToken.expires_at - 60000) {
     return cachedToken.access_token;
   }
@@ -115,6 +114,43 @@ async function salusRequest<T>(endpoint: string, options: RequestInit = {}): Pro
   return response.json();
 }
 
+// Normalize SALUS API camelCase fields to our snake_case FormInstance interface
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeForm(raw: any): FormInstance {
+  return {
+    id: String(raw.id ?? ""),
+    form_template_id: String(raw.formId ?? raw.form_template_id ?? ""),
+    form_template_name: String(raw.formTitle ?? raw.form_template_name ?? raw.formName ?? "Unnamed Form"),
+    company_id: String(raw.companyId ?? raw.company_id ?? ""),
+    company_name: String(raw.companyName ?? raw.company_name ?? "Unknown"),
+    site_id: raw.siteId ? String(raw.siteId) : raw.site_id ? String(raw.site_id) : undefined,
+    site_name: raw.siteName ?? raw.site_name ?? undefined,
+    status: String(raw.status ?? ""),
+    created_at: String(raw.createdAt ?? raw.created_at ?? ""),
+    updated_at: String(raw.updatedAt ?? raw.updated_at ?? ""),
+    submitted_by: raw.submittedByUser ?? raw.submitted_by ?? undefined,
+    fields: raw.fields,
+    completion_percentage: raw.completion_percentage,
+    missing_fields: raw.missing_fields,
+  };
+}
+
+// Extract an array of forms from any SALUS API response shape
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractForms(data: any): FormInstance[] {
+  if (!data) return [];
+  if (Array.isArray(data)) return data.map(normalizeForm);
+  if (Array.isArray(data.results)) return data.results.map(normalizeForm);
+  if (Array.isArray(data.data)) return data.data.map(normalizeForm);
+  if (Array.isArray(data.items)) return data.items.map(normalizeForm);
+  // Dict keyed by ID: { "12345": {...}, "12346": {...} }
+  const values = Object.values(data);
+  if (values.length > 0 && typeof values[0] === "object" && values[0] !== null) {
+    return values.map(normalizeForm);
+  }
+  return [];
+}
+
 // Fetch all public access entries (forms assigned to sites)
 export async function getPublicAccessForms(): Promise<PublicAccessEntry[]> {
   try {
@@ -130,7 +166,9 @@ export async function getPublicAccessForms(): Promise<PublicAccessEntry[]> {
 // Fetch a specific form instance by ID
 export async function getFormInstance(formInstanceId: string): Promise<FormInstance | null> {
   try {
-    return await salusRequest<FormInstance>(`/v1/form-instance/${formInstanceId}/`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = await salusRequest<any>(`/v1/form-instance/${formInstanceId}/`);
+    return normalizeForm(raw);
   } catch {
     return null;
   }
@@ -153,10 +191,9 @@ export async function getFormInstances(params?: {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data = await salusRequest<any>(endpoint);
-    // Handle different response shapes from the SALUS API
-    if (Array.isArray(data)) return { results: data, count: data.length };
-    const results = data?.results ?? data?.data ?? data?.items ?? data?.form_instances ?? [];
-    return { results: Array.isArray(results) ? results : [], count: data?.count ?? data?.total ?? results.length };
+    const results = extractForms(data);
+    const count = data?.count ?? data?.total ?? results.length;
+    return { results, count };
   } catch {
     return { results: [], count: 0 };
   }
@@ -181,7 +218,6 @@ export function analyzeFormCompletion(form: FormInstance): {
   missingFields: string[];
   status: "complete" | "incomplete" | "pending";
 } {
-  // If the form has detailed field data, use it
   if (form.fields && form.fields.length > 0) {
     const requiredFields = form.fields.filter((f) => f.required);
     const missingFields = requiredFields
@@ -201,7 +237,6 @@ export function analyzeFormCompletion(form: FormInstance): {
     };
   }
 
-  // Fall back to status-based assessment
   const statusLower = (form.status || "").toLowerCase();
   if (statusLower === "submitted" || statusLower === "completed" || statusLower === "approved") {
     return { isComplete: true, completionPercentage: 100, missingFields: [], status: "complete" };
