@@ -1,0 +1,37 @@
+{
+  "name": "Versys Safety Dashboard",
+  "short_name": "Versys Safety",
+  "description": "Track SALUS form completion across all Versys job sites",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1d4ed8",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "People Status",
+      "url": "/people",
+      "description": "See who filled out their forms"
+    },
+    {
+      "name": "Admin",
+      "url": "/admin",
+      "description": "Manage projects and teams"
+    }
+  ]
+}
