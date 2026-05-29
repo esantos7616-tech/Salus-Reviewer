@@ -1,4 +1,7 @@
 // Fetch and analyze all form instances from SALUS
+// Cache responses for 5 minutes to speed up load times
+export const revalidate = 300;
+
 import { NextRequest, NextResponse } from "next/server";
 import { getFormInstances, getPublicAccessForms, analyzeFormCompletion } from "@/lib/salus";
 
