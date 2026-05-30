@@ -68,7 +68,7 @@ export default function PeoplePage() {
         if (form.submitted_by) people.add(form.submitted_by);
         if (form.created_by && form.created_by !== form.submitted_by) people.add(form.created_by);
 
-        for (const person of people) {
+        for (const person of Array.from(people)) {
           if (!personMap.has(person)) personMap.set(person, { sites: new Set(), formsByName: new Map() });
           const entry = personMap.get(person)!;
           if (form.site_name) entry.sites.add(form.site_name);
