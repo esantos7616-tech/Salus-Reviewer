@@ -206,6 +206,26 @@ export async function getFormInstances(params?: {
   }
 }
 
+// Fetch sites/projects from SALUS API (tries multiple endpoint names)
+export async function getSites(): Promise<{ id: string; name: string; city: string; status: string }[]> {
+  for (const path of ["/v1/site/", "/v1/sites/", "/v1/project/", "/v1/projects/"]) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await salusRequest<any>(path);
+      const rows = Array.isArray(data) ? data : (data?.results ?? data?.data ?? data?.items ?? Object.values(data));
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows.map((r: Record<string, unknown>) => ({
+          id: String(r.id ?? r.siteId ?? r.projectId ?? ""),
+          name: String(r.name ?? r.siteName ?? r.projectName ?? ""),
+          city: String(r.city ?? r.address ?? r.location ?? ""),
+          status: (r.isArchived || r.archived) ? "archived" : "active",
+        }));
+      }
+    } catch { continue; }
+  }
+  return [];
+}
+
 // Aggregate incidents
 export async function getIncidents(params?: {
   company_id?: string;
