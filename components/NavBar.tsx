@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import Image from "next/image";
 
 const links = [
   { href: "/", label: "Dashboard", icon: "📊" },
@@ -32,11 +31,10 @@ export default function NavBar() {
       {/* Top bar */}
       <header className="bg-blue-700 dark:bg-gray-900 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-40 border-b border-blue-800 dark:border-gray-700">
         <div className="flex items-center gap-3">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/Versys logo .png"
             alt="Versys"
-            width={120}
-            height={36}
             className="h-8 w-auto brightness-0 invert"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
