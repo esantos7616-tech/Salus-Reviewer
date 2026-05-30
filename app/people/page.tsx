@@ -78,9 +78,9 @@ export default function PeoplePage() {
       }
 
       const statuses: PersonStatus[] = [];
-      for (const [name, entry] of personMap.entries()) {
+      for (const [name, entry] of Array.from(personMap.entries())) {
         const formStatuses: PersonFormStatus[] = [];
-        for (const [formName, instances] of entry.formsByName.entries()) {
+        for (const [formName, instances] of Array.from(entry.formsByName.entries())) {
           const latest = instances.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
           const isComplete = latest.analysis.isComplete;
           const isDraft = (latest.status || "").toLowerCase() === "draft";
