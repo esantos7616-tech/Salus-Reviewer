@@ -60,6 +60,8 @@ export default function AdminPage() {
   const [savingProject, setSavingProject] = useState(false);
   const [savingMember, setSavingMember] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ added: number; skipped: number } | null>(null);
 
   useEffect(() => {
     loadAll();
@@ -77,6 +79,21 @@ export default function AdminPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleSyncFromSalus() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/salus/sync", { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setSyncResult({ added: data.added, skipped: data.skipped });
+        if (data.added > 0) await loadAll();
+        showSuccess(`Synced! ${data.added} new projects added.`);
+      }
+    } catch { showSuccess("Sync failed — try again."); }
+    finally { setSyncing(false); }
   }
 
   function showSuccess(msg: string) {
@@ -155,9 +172,22 @@ export default function AdminPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-        <p className="text-gray-500 text-sm mt-1">Management only — add job sites and assign team members</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Panel</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Manage job sites and team assignments</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <button onClick={handleSyncFromSalus} disabled={syncing}
+            className="inline-flex items-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-colors shadow">
+            {syncing ? "⟳ Syncing..." : "↻ Sync Projects from SALUS"}
+          </button>
+          {syncResult && (
+            <p className="text-xs text-center text-gray-500 dark:text-gray-400">
+              {syncResult.added} added · {syncResult.skipped} already exist
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Success toast */}
