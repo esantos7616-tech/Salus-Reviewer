@@ -33,8 +33,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js');})}`,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark')}}catch(e){}})()`,
+          }}
+        />
       </head>
-      <body className={`${inter.className} bg-gray-50 min-h-screen`}>
+      <body className={`${inter.className} bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors`}>
         <NavBar />
         <main>{children}</main>
       </body>
