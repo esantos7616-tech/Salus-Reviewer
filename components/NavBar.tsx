@@ -33,7 +33,7 @@ export default function NavBar() {
       <header className="bg-blue-700 dark:bg-gray-900 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-40 border-b border-blue-800 dark:border-gray-700">
         <div className="flex items-center gap-3">
           <Image
-            src="/versys-logo.png"
+            src="/Versys logo .png"
             alt="Versys"
             width={120}
             height={36}
