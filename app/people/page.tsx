@@ -78,7 +78,7 @@ export default function PeoplePage() {
       }
 
       const statuses: PersonStatus[] = [];
-     for (const [name, entry] of Array.from(personMap.entries())) {
+      for (const [name, entry] of Array.from(personMap.entries())) {
         const formStatuses: PersonFormStatus[] = [];
         for (const [formName, instances] of Array.from(entry.formsByName.entries())) {
           const latest = instances.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
@@ -154,7 +154,7 @@ export default function PeoplePage() {
                 </div>
                 <div>
                   <p className="font-bold text-gray-900">{selectedPerson.name}</p>
-                  <p className="text-xs text-gray-500">{selectedPerson.sites.slice(0, 2).map(s => s.replace(/^[\u{1F1FA}\u{1F1E8}\u{1F1FA}\u{1F1F8}\s]*/u, "")).join(", ")}</p>
+                  <p className="text-xs text-gray-500">{selectedPerson.sites.slice(0, 2).map(s => s.replace(/^[^\w\d(]+/, "")).join(", ")}</p>
                 </div>
               </div>
               <button onClick={() => setSelectedPerson(null)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
@@ -214,7 +214,7 @@ export default function PeoplePage() {
           {allSites.slice(0, 12).map((site) => (
             <button key={site} onClick={() => setSelectedSite(site)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors truncate max-w-[220px] ${selectedSite === site ? "bg-blue-700 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-              {site.replace(/^[^\w\s]*\s*/u, "")}
+              {site.replace(/^[^\w\d(]+/, "")}
             </button>
           ))}
         </div>
@@ -239,7 +239,7 @@ export default function PeoplePage() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 truncate">{person.name}</p>
                   <p className="text-xs text-gray-500 truncate">
-                    {person.sites.slice(0, 2).map(s => s.replace(/^[^\w\s]*\s*/u, "")).join(", ")}
+                    {person.sites.slice(0, 2).map(s => s.replace(/^[^\w\d(]+/, "")).join(", ")}
                     {person.sites.length > 2 ? ` +${person.sites.length - 2} more` : ""}
                   </p>
                 </div>
