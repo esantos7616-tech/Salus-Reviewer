@@ -126,7 +126,7 @@ export default function PeoplePage() {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-3">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-200 p-5 animate-pulse">
+          <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 animate-pulse">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-full bg-gray-200" />
               <div className="flex-1">
@@ -146,7 +146,7 @@ export default function PeoplePage() {
       {/* Person Detail Modal */}
       {selectedPerson && (
         <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={() => setSelectedPerson(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className={`px-6 py-4 border-b flex items-center justify-between ${selectedPerson.allDone ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${selectedPerson.allDone ? "bg-green-600" : "bg-red-500"}`}>
@@ -186,7 +186,7 @@ export default function PeoplePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">People Status</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">People Status</h1>
           <p className="text-gray-500 text-sm mt-0.5">
             Auto-detected from SALUS — no manual setup needed
             {lastRefresh && ` · Updated ${lastRefresh.toLocaleTimeString()}`}
@@ -222,7 +222,7 @@ export default function PeoplePage() {
 
       {/* People cards */}
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
           <p className="text-4xl mb-3">👥</p>
           <p className="font-semibold text-gray-700">No people found</p>
           <p className="text-gray-400 text-sm mt-1">People appear automatically once they submit or create a form in SALUS</p>
@@ -231,13 +231,13 @@ export default function PeoplePage() {
         <div className="space-y-3">
           {filtered.map((person) => (
             <button key={person.name} onClick={() => setSelectedPerson(person)}
-              className={`w-full text-left bg-white rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${person.allDone ? "border-green-200" : "border-red-200"}`}>
+              className={`w-full text-left bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${person.allDone ? "border-green-200 dark:border-green-800" : "border-red-200 dark:border-red-800"}`}>
               <div className="flex items-center gap-4 px-5 py-4">
                 <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${person.allDone ? "bg-green-600" : "bg-red-500"}`}>
                   {person.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 truncate">{person.name}</p>
+                  <p className="font-semibold text-gray-900 dark:text-white truncate">{person.name}</p>
                   <p className="text-xs text-gray-500 truncate">
                     {person.sites.slice(0, 2).map(s => s.replace(/^[^\w\d(]+/, "")).join(", ")}
                     {person.sites.length > 2 ? ` +${person.sites.length - 2} more` : ""}
@@ -252,7 +252,7 @@ export default function PeoplePage() {
                 </div>
               </div>
               {person.forms.length > 0 && (
-                <div className="border-t border-gray-100 px-5 py-3 bg-gray-50">
+                <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3 bg-gray-50 dark:bg-gray-900">
                   <div className="flex flex-wrap gap-2">
                     {person.forms.map((f) => (
                       <span key={f.formName}
