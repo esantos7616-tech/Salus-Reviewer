@@ -384,7 +384,7 @@ export default function Dashboard() {
               const problem = getProblemDescription(form);
               return (
                 <button key={form.id} onClick={() => setSelectedForm(form)}
-                  className="w-full text-left bg-white dark:bg-gray-750 border border-red-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-gray-700 rounded-lg px-4 py-3 transition-all group">
+                  className="w-full text-left bg-white dark:bg-gray-700 border border-red-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-gray-600 rounded-lg px-4 py-3 transition-all group">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-red-800 truncate">{form.form_template_name}</p>
@@ -503,7 +503,7 @@ export default function Dashboard() {
                         {visibleForms.map((form) => (
                           <tr key={form.id}
                             onClick={() => !form.analysis.isComplete ? setSelectedForm(form) : undefined}
-                            className={`transition-colors ${!form.analysis.isComplete ? "bg-red-50/30 hover:bg-red-50 cursor-pointer" : "hover:bg-gray-50"}`}>
+                            className={`transition-colors ${!form.analysis.isComplete ? "bg-red-50/30 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer" : "hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
                             <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
                               {form.form_template_name || "Unnamed Form"}
                               {!form.analysis.isComplete && (
