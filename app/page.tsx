@@ -212,7 +212,7 @@ export default function Dashboard() {
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">✓ Complete</span>
     );
     if (form.analysis.status === "incomplete") return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">⚑ Incomplete</span>
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400">⚑ Incomplete</span>
     );
     return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">○ Pending</span>;
   };
@@ -372,10 +372,10 @@ export default function Dashboard() {
 
       {/* Flagged Banner — clickable */}
       {data && data.flagged.length > 0 && (
-        <div className="bg-red-50 dark:bg-gray-800 border border-red-300 dark:border-gray-700 border-l-4 dark:border-l-red-500 rounded-xl p-4 mb-6">
+        <div className="bg-red-50 dark:bg-gray-800 border border-red-200 dark:border-gray-700 dark:border-l-4 dark:border-l-red-400 rounded-xl p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-red-600 font-bold text-lg">⚑</span>
-            <p className="font-semibold text-red-800">
+            <p className="font-semibold text-red-800 dark:text-red-400">
               {data.flagged.length} document{data.flagged.length !== 1 ? "s" : ""} flagged — click any to see the problem
             </p>
           </div>
@@ -384,15 +384,15 @@ export default function Dashboard() {
               const problem = getProblemDescription(form);
               return (
                 <button key={form.id} onClick={() => setSelectedForm(form)}
-                  className="w-full text-left bg-white dark:bg-gray-700 border border-red-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-gray-600 rounded-lg px-4 py-3 transition-all group">
+                  className="w-full text-left bg-white dark:bg-gray-700 border border-red-100 dark:border-gray-600 dark:border-l-4 dark:border-l-red-400 hover:bg-red-50 dark:hover:bg-gray-600 rounded-lg px-4 py-3 transition-all group">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-red-800 truncate">{form.form_template_name}</p>
-                      <p className="text-xs text-red-500 truncate">
+                      <p className="text-sm font-semibold text-red-800 dark:text-gray-100 truncate">{form.form_template_name}</p>
+                      <p className="text-xs text-red-500 dark:text-red-400 truncate">
                         {form.site_name || form.company_name || "—"} · {problem.title}
                       </p>
                     </div>
-                    <span className="text-red-400 group-hover:text-red-600 text-sm shrink-0">View →</span>
+                    <span className="text-red-400 dark:text-gray-400 group-hover:text-red-600 dark:group-hover:text-gray-200 text-sm shrink-0">View →</span>
                   </div>
                 </button>
               );
@@ -507,7 +507,7 @@ export default function Dashboard() {
                             <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
                               {form.form_template_name || "Unnamed Form"}
                               {!form.analysis.isComplete && (
-                                <p className="text-xs text-red-500 mt-0.5">{getProblemDescription(form).title}</p>
+                                <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{getProblemDescription(form).title}</p>
                               )}
                             </td>
                             <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">{form.site_name || "—"}</td>
