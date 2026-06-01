@@ -351,7 +351,7 @@ export default function Dashboard() {
             <p className="text-sm text-gray-500 font-medium mb-1">Total Documents</p>
             <p className="text-4xl font-bold text-gray-900 dark:text-white">{data.summary.total}</p>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-green-200 dark:border-green-900 p-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-green-200 dark:border-gray-700 p-6 shadow-sm">
             <p className="text-sm text-green-600 font-medium mb-1">Completed</p>
             <p className="text-4xl font-bold text-green-700">{data.summary.complete}</p>
             <div className="mt-2 h-1.5 bg-green-100 rounded-full">
@@ -359,7 +359,7 @@ export default function Dashboard() {
                 style={{ width: `${data.summary.total > 0 ? (data.summary.complete / data.summary.total) * 100 : 0}%` }} />
             </div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-200 dark:border-red-900 p-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-200 dark:border-gray-700 p-6 shadow-sm">
             <p className="text-sm text-red-600 font-medium mb-1">Flagged / Incomplete</p>
             <p className="text-4xl font-bold text-red-700">{data.summary.incomplete}</p>
             <div className="mt-2 h-1.5 bg-red-100 rounded-full">
@@ -372,7 +372,7 @@ export default function Dashboard() {
 
       {/* Flagged Banner — clickable */}
       {data && data.flagged.length > 0 && (
-        <div className="bg-red-50 dark:bg-red-950 border border-red-300 dark:border-red-800 rounded-xl p-4 mb-6">
+        <div className="bg-red-50 dark:bg-gray-800 border border-red-300 dark:border-gray-700 border-l-4 dark:border-l-red-500 rounded-xl p-4 mb-6">
           <div className="flex items-center gap-2 mb-3">
             <span className="text-red-600 font-bold text-lg">⚑</span>
             <p className="font-semibold text-red-800">
@@ -384,7 +384,7 @@ export default function Dashboard() {
               const problem = getProblemDescription(form);
               return (
                 <button key={form.id} onClick={() => setSelectedForm(form)}
-                  className="w-full text-left bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg px-4 py-3 transition-all group">
+                  className="w-full text-left bg-white dark:bg-gray-750 border border-red-200 dark:border-gray-600 hover:border-red-400 dark:hover:border-red-500 hover:bg-red-50 dark:hover:bg-gray-700 rounded-lg px-4 py-3 transition-all group">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-red-800 truncate">{form.form_template_name}</p>
