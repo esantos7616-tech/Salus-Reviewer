@@ -220,7 +220,7 @@ export default function Dashboard() {
   if (!configured) {
     return (
       <div className="flex items-center justify-center min-h-[80vh] px-4">
-        <div className="bg-white rounded-2xl shadow-md border border-gray-200 p-10 max-w-md w-full text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700 p-10 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <span className="text-3xl">🔑</span>
           </div>
@@ -253,7 +253,7 @@ export default function Dashboard() {
         const severityColor = problem.severity === "high" ? "red" : problem.severity === "medium" ? "yellow" : "orange";
         return (
           <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={() => setSelectedForm(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className={`px-6 py-4 bg-${severityColor}-50 border-b border-${severityColor}-200 flex items-start justify-between gap-4`}>
                 <div>
@@ -270,21 +270,21 @@ export default function Dashboard() {
               {/* Details */}
               <div className="px-6 pb-6 space-y-3">
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">SITE</p>
-                    <p className="font-semibold text-gray-800">{selectedForm.site_name || "—"}</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">SITE</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.site_name || "—"}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">STATUS</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">STATUS</p>
                     <p className="font-semibold text-gray-800 capitalize">{selectedForm.status || "—"}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">SUBMITTED BY</p>
-                    <p className="font-semibold text-gray-800">{selectedForm.submitted_by || "Not submitted"}</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">SUBMITTED BY</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.submitted_by || "Not submitted"}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">CREATED BY</p>
-                    <p className="font-semibold text-gray-800">{selectedForm.created_by || "—"}</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">CREATED BY</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.created_by || "—"}</p>
                   </div>
                   {(selectedForm.corrective_action_count ?? 0) > 0 && (
                     <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -292,13 +292,13 @@ export default function Dashboard() {
                       <p className="font-bold text-red-700">{selectedForm.corrective_action_count} open action{(selectedForm.corrective_action_count ?? 0) > 1 ? "s" : ""} required</p>
                     </div>
                   )}
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">LAST UPDATED</p>
-                    <p className="font-semibold text-gray-800">{selectedForm.updated_at ? new Date(selectedForm.updated_at).toLocaleDateString() : "—"}</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">LAST UPDATED</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.updated_at ? new Date(selectedForm.updated_at).toLocaleDateString() : "—"}</p>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-400 font-medium mb-0.5">CREATED</p>
-                    <p className="font-semibold text-gray-800">{selectedForm.created_at ? new Date(selectedForm.created_at).toLocaleDateString() : "—"}</p>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">CREATED</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.created_at ? new Date(selectedForm.created_at).toLocaleDateString() : "—"}</p>
                   </div>
                 </div>
                 <p className="text-xs text-gray-400 text-center pt-2">Tap outside to close</p>
@@ -311,7 +311,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Document Review Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Document Review Dashboard</h1>
           <div className="flex items-center gap-3 mt-1">
             <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
               <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live
@@ -347,9 +347,9 @@ export default function Dashboard() {
       {/* Summary Cards */}
       {data && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
             <p className="text-sm text-gray-500 font-medium mb-1">Total Documents</p>
-            <p className="text-4xl font-bold text-gray-900">{data.summary.total}</p>
+            <p className="text-4xl font-bold text-gray-900 dark:text-white">{data.summary.total}</p>
           </div>
           <div className="bg-white rounded-xl border border-green-200 p-6 shadow-sm">
             <p className="text-sm text-green-600 font-medium mb-1">Completed</p>
@@ -415,12 +415,12 @@ export default function Dashboard() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
         <input type="text" placeholder="Search project..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
         <div className="flex gap-2">
           {(["all", "complete", "incomplete"] as FilterStatus[]).map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-4 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors ${
-                filter === f ? "bg-blue-700 text-white" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"}`}>
+                filter === f ? "bg-blue-700 text-white" : "bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
               {f}
             </button>
           ))}
@@ -431,9 +431,9 @@ export default function Dashboard() {
       {loading && !data && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-xl border border-gray-200 p-6 animate-pulse">
-              <div className="h-4 bg-gray-200 rounded w-1/3 mb-3" />
-              <div className="h-3 bg-gray-100 rounded w-1/2" />
+            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
+              <div className="h-3 bg-gray-100 dark:bg-gray-600 rounded w-1/2" />
             </div>
           ))}
         </div>
@@ -441,9 +441,9 @@ export default function Dashboard() {
 
       {/* No Data */}
       {!loading && data && data.summary.total === 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
           <p className="text-5xl mb-4">📋</p>
-          <p className="text-xl font-semibold text-gray-700">No documents found</p>
+          <p className="text-xl font-semibold text-gray-700 dark:text-gray-200">No documents found</p>
           <p className="text-gray-400 text-sm mt-2">No form instances returned from SALUS.</p>
         </div>
       )}
@@ -458,16 +458,16 @@ export default function Dashboard() {
               : company.forms.filter((f) => filter === "complete" ? f.analysis.isComplete : !f.analysis.isComplete);
             if (visibleForms.length === 0) return null;
             return (
-              <div key={companyId} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div key={companyId} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
                 <button onClick={() => setExpandedCompany(isExpanded ? null : companyId)}
-                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors text-left">
+                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
                       {company.name.slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-900">{company.name}</p>
-                      <p className="text-xs text-gray-500">{company.total} document{company.total !== 1 ? "s" : ""} · {company.complete} complete · {company.incomplete} incomplete</p>
+                      <p className="font-semibold text-gray-900 dark:text-white">{company.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{company.total} document{company.total !== 1 ? "s" : ""} · {company.complete} complete · {company.incomplete} incomplete</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -483,14 +483,14 @@ export default function Dashboard() {
                     {company.incomplete > 0 && (
                       <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">⚑ {company.incomplete}</span>
                     )}
-                    <span className="text-gray-400 text-sm">{isExpanded ? "▲" : "▼"}</span>
+                    <span className="text-gray-400 dark:text-gray-500 text-sm">{isExpanded ? "▲" : "▼"}</span>
                   </div>
                 </button>
 
                 {isExpanded && (
-                  <div className="border-t border-gray-100">
+                  <div className="border-t border-gray-100 dark:border-gray-700">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <thead className="bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400 uppercase">
                         <tr>
                           <th className="text-left px-6 py-3 font-medium">Form Name</th>
                           <th className="text-left px-6 py-3 font-medium hidden sm:table-cell">Site</th>
@@ -499,20 +499,20 @@ export default function Dashboard() {
                           <th className="text-left px-6 py-3 font-medium">Status</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                         {visibleForms.map((form) => (
                           <tr key={form.id}
                             onClick={() => !form.analysis.isComplete ? setSelectedForm(form) : undefined}
                             className={`transition-colors ${!form.analysis.isComplete ? "bg-red-50/30 hover:bg-red-50 cursor-pointer" : "hover:bg-gray-50"}`}>
-                            <td className="px-6 py-4 font-medium text-gray-900">
+                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
                               {form.form_template_name || "Unnamed Form"}
                               {!form.analysis.isComplete && (
                                 <p className="text-xs text-red-500 mt-0.5">{getProblemDescription(form).title}</p>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-gray-500 hidden sm:table-cell">{form.site_name || "—"}</td>
-                            <td className="px-6 py-4 text-gray-500 hidden md:table-cell">{form.submitted_by || form.created_by || "—"}</td>
-                            <td className="px-6 py-4 text-gray-500 hidden lg:table-cell">
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">{form.site_name || "—"}</td>
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden md:table-cell">{form.submitted_by || form.created_by || "—"}</td>
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden lg:table-cell">
                               {form.updated_at ? new Date(form.updated_at).toLocaleDateString() : "—"}
                             </td>
                             <td className="px-6 py-4">{statusBadge(form)}</td>
