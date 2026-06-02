@@ -1,307 +1,530 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+
+interface FormAnalysis {
+  isComplete: boolean;
+  completionPercentage: number;
+  missingFields: string[];
+  status: "complete" | "incomplete" | "pending";
+}
 
 interface FormInstance {
   id: string;
   form_template_name: string;
+  company_name: string;
   site_name?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
   submitted_by?: string;
   created_by?: string;
-  updated_at: string;
-  status: string;
   corrective_action_count?: number;
-  analysis: { isComplete: boolean; completionPercentage: number; status: string };
+  analysis: FormAnalysis;
 }
 
-interface PersonFormStatus {
-  formName: string;
-  formId: string;
-  submitted: boolean;
-  complete: boolean;
-  isDraft: boolean;
-  noSignature: boolean;
-  hasCorrectiveActions: boolean;
-  correctiveCount: number;
-  submittedAt?: string;
-  problemLabel: string;
-}
-
-interface PersonStatus {
+interface CompanyGroup {
   name: string;
-  sites: string[];
-  forms: PersonFormStatus[];
-  allDone: boolean;
-  issueCount: number;
+  total: number;
+  complete: number;
+  incomplete: number;
+  forms: FormInstance[];
 }
 
-function getFormProblem(form: FormInstance): string {
+interface DashboardData {
+  summary: { total: number; complete: number; incomplete: number };
+  byCompany: Record<string, CompanyGroup>;
+  flagged: FormInstance[];
+  forms: FormInstance[];
+}
+
+type FilterStatus = "all" | "complete" | "incomplete";
+
+interface Toast {
+  id: string;
+  message: string;
+  type: "success" | "warning" | "info";
+}
+
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+
+function getProblemDescription(form: FormInstance): { title: string; detail: string; severity: "high" | "medium" | "low" } {
   const status = (form.status || "").toLowerCase();
+  const hasCorrectiveActions = (form.corrective_action_count ?? 0) > 0;
   const notSubmitted = !form.submitted_by;
-  if ((form.corrective_action_count ?? 0) > 0) return `${form.corrective_action_count} corrective action${(form.corrective_action_count ?? 0) > 1 ? "s" : ""} open`;
-  if (status === "draft" && notSubmitted) return "Started but not submitted";
-  if (status === "draft") return "Draft — not signed off";
-  if (notSubmitted) return "Missing signature";
-  if (status === "in_progress") return "In progress — not submitted";
-  return "Incomplete";
+  const person = form.submitted_by || form.created_by || "Unknown person";
+
+  if (hasCorrectiveActions) {
+    return {
+      title: `${form.corrective_action_count} Open Corrective Action${(form.corrective_action_count ?? 0) > 1 ? "s" : ""}`,
+      detail: `This form has open corrective actions that must be resolved before it can be considered complete.`,
+      severity: "high",
+    };
+  }
+  if (status === "draft" && notSubmitted) {
+    const creator = form.created_by || "Someone";
+    return {
+      title: "Started but Never Submitted",
+      detail: `${creator} started this form but never completed or signed off on it. They need to reopen it in SALUS and submit.`,
+      severity: "high",
+    };
+  }
+  if (status === "draft") {
+    return {
+      title: "Draft — Not Fully Completed",
+      detail: `${person} has this form saved as a draft. It has not been submitted or signed off yet.`,
+      severity: "high",
+    };
+  }
+  if (notSubmitted) {
+    return {
+      title: "Missing Signature",
+      detail: `This form was created but has no recorded submission. No one has signed off on it.`,
+      severity: "medium",
+    };
+  }
+  if (status === "in_progress") {
+    return {
+      title: "In Progress — Not Submitted",
+      detail: `${person} has started this form but has not yet submitted it.`,
+      severity: "medium",
+    };
+  }
+  return {
+    title: "Incomplete",
+    detail: `This form is missing required information or has not been fully completed.`,
+    severity: "low",
+  };
 }
 
-export default function PeoplePage() {
-  const [personStatuses, setPersonStatuses] = useState<PersonStatus[]>([]);
+export default function Dashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [selectedSite, setSelectedSite] = useState<string>("all");
+  const [error, setError] = useState<string | null>(null);
+  const [configured, setConfigured] = useState(true);
+  const [filter, setFilter] = useState<FilterStatus>("all");
+  const [search, setSearch] = useState("");
+  const [expandedCompany, setExpandedCompany] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const [selectedPerson, setSelectedPerson] = useState<PersonStatus | null>(null);
-  const [formDetails, setFormDetails] = useState<Record<string, { missingFields: string[]; missingSig: boolean; loading: boolean }>>({});
+  const [nextRefreshIn, setNextRefreshIn] = useState<number>(AUTO_REFRESH_MS);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [downloading, setDownloading] = useState(false);
+  const [selectedForm, setSelectedForm] = useState<FormInstance | null>(null);
+  const prevDataRef = useRef<DashboardData | null>(null);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  async function fetchFormDetails(formId: string) {
-    if (formDetails[formId] || !formId) return;
-    setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, loading: true } }));
+  const addToast = useCallback((message: string, type: Toast["type"]) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 5000);
+  }, []);
+
+  const dismissToast = (id: string) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
+  const detectChanges = useCallback((newData: DashboardData) => {
+    const prev = prevDataRef.current;
+    if (!prev) return;
+    const prevIds = new Set(prev.forms.map((f) => f.id));
+    const prevCompleteIds = new Set(prev.forms.filter((f) => f.analysis.isComplete).map((f) => f.id));
+    const prevFlaggedIds = new Set(prev.flagged.map((f) => f.id));
+    const newlyCompleted = newData.forms.filter((f) => f.analysis.isComplete && prevIds.has(f.id) && !prevCompleteIds.has(f.id));
+    if (newlyCompleted.length > 0) addToast(`✓ ${newlyCompleted.length} form${newlyCompleted.length > 1 ? "s" : ""} just completed!`, "success");
+    const newlyFlagged = newData.flagged.filter((f) => !prevFlaggedIds.has(f.id));
+    if (newlyFlagged.length > 0) addToast(`⚑ ${newlyFlagged.length} form${newlyFlagged.length > 1 ? "s" : ""} flagged as incomplete`, "warning");
+    const newSubmissions = newData.forms.filter((f) => !prevIds.has(f.id));
+    if (newSubmissions.length > 0) addToast(`📋 ${newSubmissions.length} new form${newSubmissions.length > 1 ? "s" : ""} submitted`, "info");
+  }, [addToast]);
+
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError(null);
     try {
-      const res = await fetch(`/api/salus/form/${formId}`);
-      const data = await res.json();
-      setFormDetails(prev => ({ ...prev, [formId]: { missingFields: data.missingFields ?? [], missingSig: data.missingSig ?? false, loading: false } }));
-    } catch {
-      setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, loading: false } }));
-    }
-  }
+      const statusRes = await fetch("/api/salus/status");
+      const statusData = await statusRes.json();
+      if (!statusData.configured) { setConfigured(false); setLoading(false); return; }
+    } catch { setConfigured(false); setLoading(false); return; }
 
-  useEffect(() => { loadAll(); }, []);
-
-  async function loadAll() {
-    setLoading(true);
     try {
-      const res = await fetch("/api/salus/forms");
-      const data = await res.json();
-      const forms: FormInstance[] = data?.forms ?? [];
-
-      const personMap = new Map<string, { sites: Set<string>; formsByName: Map<string, FormInstance[]> }>();
-
-      for (const form of forms) {
-        const people = new Set<string>();
-        if (form.submitted_by) people.add(form.submitted_by);
-        if (form.created_by && form.created_by !== form.submitted_by) people.add(form.created_by);
-
-        for (const person of Array.from(people)) {
-          if (!personMap.has(person)) personMap.set(person, { sites: new Set(), formsByName: new Map() });
-          const entry = personMap.get(person)!;
-          if (form.site_name) entry.sites.add(form.site_name);
-          if (!entry.formsByName.has(form.form_template_name)) entry.formsByName.set(form.form_template_name, []);
-          entry.formsByName.get(form.form_template_name)!.push(form);
-        }
-      }
-
-      const statuses: PersonStatus[] = [];
-      for (const [name, entry] of Array.from(personMap.entries())) {
-        const formStatuses: PersonFormStatus[] = [];
-        for (const [formName, instances] of Array.from(entry.formsByName.entries())) {
-          const latest = instances.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0];
-          const isComplete = latest.analysis.isComplete;
-          const isDraft = (latest.status || "").toLowerCase() === "draft";
-          formStatuses.push({
-            formName,
-            formId: latest.id,
-            submitted: !!latest.submitted_by,
-            complete: isComplete,
-            isDraft,
-            noSignature: !latest.submitted_by,
-            hasCorrectiveActions: (latest.corrective_action_count ?? 0) > 0,
-            correctiveCount: latest.corrective_action_count ?? 0,
-            submittedAt: latest.updated_at,
-            problemLabel: isComplete ? "" : getFormProblem(latest),
-          });
-        }
-        const issueCount = formStatuses.filter((f) => !f.complete).length;
-        statuses.push({
-          name,
-          sites: Array.from(entry.sites),
-          forms: formStatuses.sort((a, b) => (a.complete ? 1 : -1) - (b.complete ? 1 : -1)),
-          allDone: issueCount === 0 && formStatuses.length > 0,
-          issueCount,
-        });
-      }
-
-      statuses.sort((a, b) => {
-        if (a.allDone !== b.allDone) return a.allDone ? 1 : -1;
-        return a.name.localeCompare(b.name);
-      });
-
-      setPersonStatuses(statuses);
+      const query = filter !== "all" ? `?status=${filter}` : "";
+      const res = await fetch(`/api/salus/forms${query}`);
+      if (!res.ok) throw new Error(`API error: ${res.status}`);
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      detectChanges(json);
+      prevDataRef.current = json;
+      setData(json);
       setLastRefresh(new Date());
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  }
+      setNextRefreshIn(AUTO_REFRESH_MS);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load data");
+    } finally {
+      setLoading(false);
+    }
+  }, [filter, detectChanges]);
 
-  const allSites = Array.from(new Set(personStatuses.flatMap((p) => p.sites))).sort();
-  const filtered = selectedSite === "all" ? personStatuses : personStatuses.filter((p) => p.sites.includes(selectedSite));
-  const allGood = filtered.filter((p) => p.allDone).length;
-  const hasIssues = filtered.filter((p) => !p.allDone).length;
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  if (loading) {
+  useEffect(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    refreshTimerRef.current = setTimeout(() => fetchData(true), AUTO_REFRESH_MS);
+    let remaining = AUTO_REFRESH_MS;
+    countdownRef.current = setInterval(() => {
+      remaining -= 1000;
+      setNextRefreshIn(remaining > 0 ? remaining : 0);
+    }, 1000);
+    return () => {
+      if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, [lastRefresh, fetchData]);
+
+  const handleDownloadExcel = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/export");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `SALUS-Report-${new Date().toISOString().split("T")[0]}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast("✓ Excel report downloaded!", "success");
+    } catch { addToast("Failed to download report. Try again.", "warning"); }
+    finally { setDownloading(false); }
+  };
+
+  const filteredCompanies = data
+    ? Object.entries(data.byCompany).filter(([, company]) => !search || company.name.toLowerCase().includes(search.toLowerCase()))
+    : [];
+
+  const formatCountdown = (ms: number) => {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const statusBadge = (form: FormInstance) => {
+    if (form.analysis.status === "complete") return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">✓ Complete</span>
+    );
+    if (form.analysis.status === "incomplete") return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-400">⚑ Incomplete</span>
+    );
+    return <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">○ Pending</span>;
+  };
+
+  if (!configured) {
     return (
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 animate-pulse">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-full bg-gray-200" />
-              <div className="flex-1">
-                <div className="h-4 bg-gray-200 rounded w-1/3 mb-2" />
-                <div className="h-3 bg-gray-100 rounded w-1/2" />
-              </div>
-            </div>
+      <div className="flex items-center justify-center min-h-[80vh] px-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-md border border-gray-200 dark:border-gray-700 p-10 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🔑</span>
           </div>
-        ))}
+          <h2 className="text-xl font-bold text-gray-900 mb-2">API Credentials Required</h2>
+          <p className="text-gray-500 mb-6 text-sm">Add your SALUS API credentials to continue.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-      {/* Person Detail Modal */}
-      {selectedPerson && (
-        <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={() => setSelectedPerson(null)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className={`px-6 py-4 border-b flex items-center justify-between ${selectedPerson.allDone ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${selectedPerson.allDone ? "bg-green-600" : "bg-red-500"}`}>
-                  {selectedPerson.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                </div>
+      {/* Toast Notifications */}
+      <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`flex items-start gap-3 rounded-xl shadow-lg px-4 py-3 text-sm font-medium border transition-all ${
+            toast.type === "success" ? "bg-green-50 border-green-300 text-green-800"
+            : toast.type === "warning" ? "bg-red-50 border-red-300 text-red-800"
+            : "bg-blue-50 border-blue-300 text-blue-800"}`}>
+            <span className="flex-1">{toast.message}</span>
+            <button onClick={() => dismissToast(toast.id)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">×</button>
+          </div>
+        ))}
+      </div>
+
+      {/* Form Detail Panel */}
+      {selectedForm && (() => {
+        const problem = getProblemDescription(selectedForm);
+        const severityColor = problem.severity === "high" ? "red" : problem.severity === "medium" ? "yellow" : "orange";
+        return (
+          <div className="fixed inset-0 z-40 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={() => setSelectedForm(null)}>
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className={`px-6 py-4 bg-${severityColor}-50 border-b border-${severityColor}-200 flex items-start justify-between gap-4`}>
                 <div>
-                  <p className="font-bold text-gray-900">{selectedPerson.name}</p>
-                  <p className="text-xs text-gray-500">{selectedPerson.sites.slice(0, 2).map(s => s.replace(/^[^\w\d(]+/, "")).join(", ")}</p>
+                  <p className={`text-xs font-bold uppercase tracking-wide text-${severityColor}-600 mb-1`}>⚑ Flagged Form</p>
+                  <h2 className="text-lg font-bold text-gray-900">{selectedForm.form_template_name}</h2>
                 </div>
+                <button onClick={() => setSelectedForm(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none mt-0.5">×</button>
               </div>
-              <button onClick={() => setSelectedPerson(null)} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Form Status</p>
-              {selectedPerson.forms.map((f) => {
-                const details = formDetails[f.formId];
-                if (!f.complete && f.formId && !details) fetchFormDetails(f.formId);
-                return (
-                  <div key={f.formName} className={`rounded-xl border p-3 ${f.complete ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : f.isDraft ? "bg-red-50 dark:bg-gray-700 border-red-200 dark:border-l-4 dark:border-red-500" : "bg-yellow-50 dark:bg-gray-700 border-yellow-200 dark:border-l-4 dark:border-yellow-500"}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <p className={`font-semibold text-sm ${f.complete ? "text-green-800 dark:text-green-400" : f.isDraft ? "text-red-800 dark:text-gray-100" : "text-yellow-800 dark:text-gray-100"}`}>
-                        {f.complete ? "✓" : f.isDraft ? "✗" : "⚠"} {f.formName}
-                      </p>
-                      {f.submittedAt && <p className="text-xs text-gray-400 shrink-0">{new Date(f.submittedAt).toLocaleDateString()}</p>}
-                    </div>
-                    {!f.complete && f.problemLabel && (
-                      <p className={`text-xs mt-1 font-medium ${f.isDraft ? "text-red-600 dark:text-red-400" : "text-yellow-700 dark:text-yellow-400"}`}>⚑ {f.problemLabel}</p>
-                    )}
-                    {f.hasCorrectiveActions && (
-                      <p className="text-xs mt-1 font-bold text-red-700 dark:text-red-400">{f.correctiveCount} corrective action{f.correctiveCount > 1 ? "s" : ""} must be resolved</p>
-                    )}
-                    {/* Show specific missing fields */}
-                    {!f.complete && details && !details.loading && details.missingFields.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
-                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">MISSING FIELDS:</p>
-                        {details.missingFields.map((field) => (
-                          <p key={field} className="text-xs text-red-600 dark:text-red-400">• {field}</p>
-                        ))}
-                      </div>
-                    )}
-                    {!f.complete && details && !details.loading && details.missingSig && (
-                      <p className="text-xs mt-2 text-red-600 dark:text-red-400 font-medium">• Signature missing — form was never signed</p>
-                    )}
-                    {!f.complete && details?.loading && (
-                      <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">Loading details...</p>
-                    )}
+              {/* Problem */}
+              <div className={`mx-6 mt-5 mb-4 bg-${severityColor}-50 border border-${severityColor}-200 rounded-xl p-4`}>
+                <p className={`font-bold text-${severityColor}-800 mb-1`}>🔍 {problem.title}</p>
+                <p className={`text-sm text-${severityColor}-700`}>{problem.detail}</p>
+              </div>
+              {/* Details */}
+              <div className="px-6 pb-6 space-y-3">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">SITE</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.site_name || "—"}</p>
                   </div>
-                );
-              })}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">STATUS</p>
+                    <p className="font-semibold text-gray-800 capitalize">{selectedForm.status || "—"}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">SUBMITTED BY</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.submitted_by || "Not submitted"}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">CREATED BY</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.created_by || "—"}</p>
+                  </div>
+                  {(selectedForm.corrective_action_count ?? 0) > 0 && (
+                    <div className="col-span-2 bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-xs text-red-500 font-medium mb-0.5">CORRECTIVE ACTIONS</p>
+                      <p className="font-bold text-red-700">{selectedForm.corrective_action_count} open action{(selectedForm.corrective_action_count ?? 0) > 1 ? "s" : ""} required</p>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">LAST UPDATED</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.updated_at ? new Date(selectedForm.updated_at).toLocaleDateString() : "—"}</p>
+                  </div>
+                  <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                    <p className="text-xs text-gray-400 dark:text-gray-500 font-medium mb-0.5">CREATED</p>
+                    <p className="font-semibold text-gray-800 dark:text-gray-100">{selectedForm.created_at ? new Date(selectedForm.created_at).toLocaleDateString() : "—"}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 text-center pt-2">Tap outside to close</p>
+              </div>
             </div>
-            <p className="text-xs text-gray-400 text-center pb-5">Tap outside to close</p>
+          </div>
+        );
+      })()}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Document Review Dashboard</h1>
+          <div className="flex items-center gap-3 mt-1">
+            <span className="flex items-center gap-1.5 text-xs text-green-600 font-medium">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />Live
+            </span>
+            {lastRefresh && (
+              <span className="text-xs text-gray-400">Updated {lastRefresh.toLocaleTimeString()} · next in {formatCountdown(nextRefreshIn)}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={handleDownloadExcel} disabled={downloading || !data}
+            className="inline-flex items-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm hover:bg-green-800 transition-colors disabled:opacity-50">
+            {downloading ? "Generating..." : "↓ Excel Report"}
+          </button>
+          <button onClick={() => fetchData()} disabled={loading}
+            className="inline-flex items-center gap-2 bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm hover:bg-blue-800 transition-colors disabled:opacity-50">
+            {loading ? <><span className="animate-spin">⟳</span> Refreshing...</> : <>⟳ Refresh Now</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <span className="text-red-500 text-lg mt-0.5">⚠</span>
+          <div>
+            <p className="font-semibold text-red-800">Error loading data</p>
+            <p className="text-red-600 text-sm">{error}</p>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">People Status</h1>
-          <p className="text-gray-500 text-sm mt-0.5">
-            Auto-detected from SALUS — no manual setup needed
-            {lastRefresh && ` · Updated ${lastRefresh.toLocaleTimeString()}`}
-          </p>
+      {/* Summary Cards */}
+      {data && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 shadow-sm">
+            <p className="text-sm text-gray-500 font-medium mb-1">Total Documents</p>
+            <p className="text-4xl font-bold text-gray-900 dark:text-white">{data.summary.total}</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-green-200 dark:border-gray-700 p-6 shadow-sm">
+            <p className="text-sm text-green-600 font-medium mb-1">Completed</p>
+            <p className="text-4xl font-bold text-green-700">{data.summary.complete}</p>
+            <div className="mt-2 h-1.5 bg-green-100 rounded-full">
+              <div className="h-1.5 bg-green-500 rounded-full transition-all"
+                style={{ width: `${data.summary.total > 0 ? (data.summary.complete / data.summary.total) * 100 : 0}%` }} />
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-200 dark:border-gray-700 p-6 shadow-sm">
+            <p className="text-sm text-red-600 font-medium mb-1">Flagged / Incomplete</p>
+            <p className="text-4xl font-bold text-red-700">{data.summary.incomplete}</p>
+            <div className="mt-2 h-1.5 bg-red-100 rounded-full">
+              <div className="h-1.5 bg-red-500 rounded-full transition-all"
+                style={{ width: `${data.summary.total > 0 ? (data.summary.incomplete / data.summary.total) * 100 : 0}%` }} />
+            </div>
+          </div>
         </div>
-        <button onClick={loadAll} className="inline-flex items-center gap-2 bg-blue-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm hover:bg-blue-800 transition-colors">
-          ⟳ Refresh
-        </button>
-      </div>
+      )}
 
-      {/* Summary pills */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2 text-sm font-semibold text-green-800">✓ {allGood} all done</div>
-        <div className={`border rounded-xl px-4 py-2 text-sm font-semibold ${hasIssues > 0 ? "bg-red-50 border-red-200 text-red-800" : "bg-gray-50 border-gray-200 text-gray-500"}`}>⚑ {hasIssues} need attention</div>
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-sm font-semibold text-blue-800">👤 {filtered.length} people tracked</div>
-      </div>
+      {/* Flagged Banner — clickable */}
+      {data && data.flagged.length > 0 && (
+        <div className="bg-red-50 dark:bg-gray-800 border border-red-200 dark:border-gray-700 dark:border-l-4 dark:border-l-red-400 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-red-600 font-bold text-lg">⚑</span>
+            <p className="font-semibold text-red-800 dark:text-red-400">
+              {data.flagged.length} document{data.flagged.length !== 1 ? "s" : ""} flagged — click any to see the problem
+            </p>
+          </div>
+          <div className="space-y-2">
+            {data.flagged.slice(0, 8).map((form) => {
+              const problem = getProblemDescription(form);
+              return (
+                <button key={form.id} onClick={() => setSelectedForm(form)}
+                  className="w-full text-left bg-white dark:bg-gray-700 border border-red-100 dark:border-gray-600 dark:border-l-4 dark:border-l-red-400 hover:bg-red-50 dark:hover:bg-gray-600 rounded-lg px-4 py-3 transition-all group">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-red-800 dark:text-gray-100 truncate">{form.form_template_name}</p>
+                      <p className="text-xs text-red-500 dark:text-red-400 truncate">
+                        {form.site_name || form.company_name || "—"} · {problem.title}
+                      </p>
+                    </div>
+                    <span className="text-red-400 dark:text-gray-400 group-hover:text-red-600 dark:group-hover:text-gray-200 text-sm shrink-0">View →</span>
+                  </div>
+                </button>
+              );
+            })}
+            {data.flagged.length > 8 && (
+              <p className="text-sm text-red-500 font-medium text-center pt-1">+ {data.flagged.length - 8} more flagged</p>
+            )}
+          </div>
+        </div>
+      )}
 
-      {/* Site filter */}
-      {allSites.length > 1 && (
-        <div className="flex gap-2 mb-6 flex-wrap">
-          <button onClick={() => setSelectedSite("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${selectedSite === "all" ? "bg-blue-700 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-            All Sites
-          </button>
-          {allSites.slice(0, 12).map((site) => (
-            <button key={site} onClick={() => setSelectedSite(site)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors truncate max-w-[220px] ${selectedSite === site ? "bg-blue-700 text-white" : "bg-white border border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-              {site.replace(/^[^\w\d(]+/, "")}
+      {/* All complete banner */}
+      {data && data.summary.incomplete === 0 && data.summary.total > 0 && (
+        <div className="bg-green-50 border border-green-300 rounded-xl p-4 mb-6 flex items-center gap-3">
+          <span className="text-2xl">🎉</span>
+          <p className="font-semibold text-green-800">All {data.summary.total} documents are complete — great work!</p>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <input type="text" placeholder="Search project..." value={search} onChange={(e) => setSearch(e.target.value)}
+          className="flex-1 border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500" />
+        <div className="flex gap-2">
+          {(["all", "complete", "incomplete"] as FilterStatus[]).map((f) => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`px-4 py-2.5 rounded-lg text-sm font-medium capitalize transition-colors ${
+                filter === f ? "bg-blue-700 text-white" : "bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+              {f}
             </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Loading Skeleton */}
+      {loading && !data && (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-3" />
+              <div className="h-3 bg-gray-100 dark:bg-gray-600 rounded w-1/2" />
+            </div>
           ))}
         </div>
       )}
 
-      {/* People cards */}
-      {filtered.length === 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-10 text-center">
-          <p className="text-4xl mb-3">👥</p>
-          <p className="font-semibold text-gray-700">No people found</p>
-          <p className="text-gray-400 text-sm mt-1">People appear automatically once they submit or create a form in SALUS</p>
+      {/* No Data */}
+      {!loading && data && data.summary.total === 0 && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
+          <p className="text-5xl mb-4">📋</p>
+          <p className="text-xl font-semibold text-gray-700 dark:text-gray-200">No documents found</p>
+          <p className="text-gray-400 text-sm mt-2">No form instances returned from SALUS.</p>
         </div>
-      ) : (
-        <div className="space-y-3">
-          {filtered.map((person) => (
-            <button key={person.name} onClick={() => setSelectedPerson(person)}
-              className={`w-full text-left bg-white dark:bg-gray-800 rounded-xl border shadow-sm overflow-hidden transition-all hover:shadow-md ${person.allDone ? "border-green-200 dark:border-green-800" : "border-red-200 dark:border-red-800"}`}>
-              <div className="flex items-center gap-4 px-5 py-4">
-                <div className={`w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 ${person.allDone ? "bg-green-600" : "bg-red-500"}`}>
-                  {person.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 dark:text-white truncate">{person.name}</p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {person.sites.slice(0, 2).map(s => s.replace(/^[^\w\d(]+/, "")).join(", ")}
-                    {person.sites.length > 2 ? ` +${person.sites.length - 2} more` : ""}
-                  </p>
-                </div>
-                <div className="shrink-0 flex items-center gap-2">
-                  {person.allDone
-                    ? <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">✓ All Complete</span>
-                    : <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800">⚑ {person.issueCount} Issue{person.issueCount > 1 ? "s" : ""}</span>
-                  }
-                  <span className="text-gray-300 text-sm">›</span>
-                </div>
-              </div>
-              {person.forms.length > 0 && (
-                <div className="border-t border-gray-100 dark:border-gray-700 px-5 py-3 bg-gray-50 dark:bg-gray-900">
-                  <div className="flex flex-wrap gap-2">
-                    {person.forms.map((f) => (
-                      <span key={f.formName}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border ${
-                          f.complete ? "bg-green-50 border-green-200 text-green-800"
-                          : f.isDraft ? "bg-red-50 border-red-200 text-red-700"
-                          : "bg-yellow-50 border-yellow-200 text-yellow-800"}`}>
-                        {f.complete ? "✓" : f.isDraft ? "✗" : "⚠"} {f.formName}
-                      </span>
-                    ))}
+      )}
+
+      {/* Company Groups */}
+      {!loading && filteredCompanies.length > 0 && (
+        <div className="space-y-4">
+          {filteredCompanies.map(([companyId, company]) => {
+            const isExpanded = expandedCompany === companyId;
+            const completionPct = company.total > 0 ? Math.round((company.complete / company.total) * 100) : 0;
+            const visibleForms = filter === "all" ? company.forms
+              : company.forms.filter((f) => filter === "complete" ? f.analysis.isComplete : !f.analysis.isComplete);
+            if (visibleForms.length === 0) return null;
+            return (
+              <div key={companyId} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                <button onClick={() => setExpandedCompany(isExpanded ? null : companyId)}
+                  className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-left">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm">
+                      {company.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white">{company.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{company.total} document{company.total !== 1 ? "s" : ""} · {company.complete} complete · {company.incomplete} incomplete</p>
+                    </div>
                   </div>
-                </div>
-              )}
-            </button>
-          ))}
+                  <div className="flex items-center gap-4">
+                    <div className="hidden sm:flex items-center gap-2">
+                      <div className="w-24 h-2 bg-gray-100 rounded-full">
+                        <div className={`h-2 rounded-full transition-all ${completionPct === 100 ? "bg-green-500" : completionPct >= 50 ? "bg-yellow-500" : "bg-red-500"}`}
+                          style={{ width: `${completionPct}%` }} />
+                      </div>
+                      <span className={`text-sm font-semibold ${completionPct === 100 ? "text-green-700" : completionPct >= 50 ? "text-yellow-700" : "text-red-700"}`}>
+                        {completionPct}%
+                      </span>
+                    </div>
+                    {company.incomplete > 0 && (
+                      <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">⚑ {company.incomplete}</span>
+                    )}
+                    <span className="text-gray-400 dark:text-gray-500 text-sm">{isExpanded ? "▲" : "▼"}</span>
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-gray-100 dark:border-gray-700">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-900 text-xs text-gray-500 dark:text-gray-400 uppercase">
+                        <tr>
+                          <th className="text-left px-6 py-3 font-medium">Form Name</th>
+                          <th className="text-left px-6 py-3 font-medium hidden sm:table-cell">Site</th>
+                          <th className="text-left px-6 py-3 font-medium hidden md:table-cell">Submitted By</th>
+                          <th className="text-left px-6 py-3 font-medium hidden lg:table-cell">Date</th>
+                          <th className="text-left px-6 py-3 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {visibleForms.map((form) => (
+                          <tr key={form.id}
+                            onClick={() => !form.analysis.isComplete ? setSelectedForm(form) : undefined}
+                            className={`transition-colors ${!form.analysis.isComplete ? "bg-red-50/30 dark:bg-red-900/10 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer" : "hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+                            <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">
+                              {form.form_template_name || "Unnamed Form"}
+                              {!form.analysis.isComplete && (
+                                <p className="text-xs text-red-500 dark:text-red-400 mt-0.5">{getProblemDescription(form).title}</p>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden sm:table-cell">{form.site_name || "—"}</td>
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden md:table-cell">{form.submitted_by || form.created_by || "—"}</td>
+                            <td className="px-6 py-4 text-gray-500 dark:text-gray-400 hidden lg:table-cell">
+                              {form.updated_at ? new Date(form.updated_at).toLocaleDateString() : "—"}
+                            </td>
+                            <td className="px-6 py-4">{statusBadge(form)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
