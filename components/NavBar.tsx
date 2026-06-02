@@ -12,12 +12,31 @@ const links = [
 export default function NavBar() {
   const pathname = usePathname();
   const [dark, setDark] = useState(false);
+  const [notifStatus, setNotifStatus] = useState<"default" | "granted" | "denied">("default");
 
   useEffect(() => {
     const saved = localStorage.getItem("theme") === "dark";
     setDark(saved);
     document.documentElement.classList.toggle("dark", saved);
+    if ("Notification" in window) setNotifStatus(Notification.permission as "default" | "granted" | "denied");
   }, []);
+
+  async function enableNotifications() {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+    const permission = await Notification.requestPermission();
+    setNotifStatus(permission as "default" | "granted" | "denied");
+    if (permission !== "granted") return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: "BMntsuU1qYbEfv7LgW5_wQod_B0BPkhDqSvKkYhe36_QCINQQs5v3TBlh5TcmNVBMe6RnUQ9CbqvFoNA44qL6Z4",
+    });
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub }),
+    });
+  }
 
   function toggleDark() {
     const next = !dark;
@@ -44,6 +63,19 @@ export default function NavBar() {
             <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
             Live
           </span>
+          {/* Notification bell */}
+          {notifStatus !== "granted" && notifStatus !== "denied" && (
+            <button onClick={enableNotifications}
+              className="w-9 h-9 rounded-lg bg-blue-600 dark:bg-gray-700 hover:bg-blue-500 dark:hover:bg-gray-600 flex items-center justify-center transition-colors"
+              title="Enable push notifications">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M5.25 9a6.75 6.75 0 0113.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 01-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 11-7.48 0 24.585 24.585 0 01-4.831-1.244.75.75 0 01-.297-1.206A6.718 6.718 0 005.25 9.75V9z"/>
+              </svg>
+            </button>
+          )}
+          {notifStatus === "granted" && (
+            <span className="text-green-400 text-xs font-medium hidden sm:block" title="Notifications enabled">🔔</span>
+          )}
           {/* Dark mode toggle */}
           <button
             onClick={toggleDark}
