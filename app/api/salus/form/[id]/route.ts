@@ -11,28 +11,38 @@ export async function GET(
     const token = await getAccessToken();
     const { id } = params;
 
-    // Fetch full form instance details
-    const res = await fetch(`${API_BASE}/v1/form-instance/${id}/`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    });
+    // Fetch form instance + signatures in parallel
+    const [formRes, sigRes] = await Promise.allSettled([
+      fetch(`${API_BASE}/v1/form-instance/${id}/`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      }),
+      fetch(`${API_BASE}/v1/form-instance/${id}/sign`, {
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      }),
+    ]);
 
-    if (!res.ok) {
+    if (formRes.status === "rejected" || !formRes.value.ok) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const data: any = await res.json();
+    const data: any = await formRes.value.json();
 
-    // Extract field-level details
+    // Parse signatures
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let signatures: any[] = [];
+    if (sigRes.status === "fulfilled" && sigRes.value.ok) {
+      const sigData = await sigRes.value.json();
+      signatures = Array.isArray(sigData) ? sigData : (sigData?.results ?? sigData?.data ?? []);
+    }
+
+    // Extract field-level details if available
     const fields = data?.fields ?? data?.form_fields ?? data?.sections?.flatMap(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (s: any) => s.fields ?? []
     ) ?? [];
 
-    // Find missing/empty required fields
+    // Find missing required fields
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const missingFields = fields.filter((f: any) => {
       const val = f.value ?? f.answer ?? f.response ?? "";
@@ -41,9 +51,17 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }).map((f: any) => f.label ?? f.name ?? f.title ?? "Unknown field");
 
-    // Signatures
-    const signatures = data?.signatures ?? data?.sign ?? [];
-    const missingSig = data?.status !== "completed" && (!signatures || signatures.length === 0);
+    const status = (data?.status ?? "").toLowerCase();
+    const isComplete = ["completed", "submitted", "approved"].includes(status);
+    const missingSig = !isComplete && signatures.length === 0;
+
+    // Format signature info
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sigInfo = signatures.map((s: any) => ({
+      name: s.signerName ?? s.userName ?? s.name ?? "Unknown",
+      date: s.createdAt ?? s.signedAt ?? null,
+      role: s.signerRole ?? s.role ?? null,
+    }));
 
     return NextResponse.json({
       id,
@@ -51,12 +69,13 @@ export async function GET(
       status: data?.status ?? "",
       submittedBy: data?.submittedByUser ?? data?.submitted_by ?? null,
       createdBy: data?.createdByUser ?? data?.created_by ?? null,
+      submittedOn: data?.submittedOn ?? null,
+      createdAt: data?.createdAt ?? null,
       siteName: data?.siteName ?? data?.site_name ?? "",
-      fields,
       missingFields,
       missingSig,
+      signatures: sigInfo,
       correctiveActionCount: data?.correctiveActionCount ?? 0,
-      raw: data,
     });
   } catch (err: unknown) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
