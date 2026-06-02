@@ -16,6 +16,7 @@ interface FormInstance {
 
 interface PersonFormStatus {
   formName: string;
+  formId: string;
   submitted: boolean;
   complete: boolean;
   isDraft: boolean;
@@ -51,6 +52,40 @@ export default function PeoplePage() {
   const [selectedSite, setSelectedSite] = useState<string>("all");
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<PersonStatus | null>(null);
+  const [expandedForm, setExpandedForm] = useState<string | null>(null);
+  const [formDetails, setFormDetails] = useState<Record<string, {
+    missingFields: string[];
+    missingSig: boolean;
+    signatures: { name: string; date: string | null; role: string | null }[];
+    submittedBy: string | null;
+    createdBy: string | null;
+    submittedOn: string | null;
+    createdAt: string | null;
+    correctiveActionCount: number;
+    loading: boolean;
+  }>>({});
+
+  async function fetchFormDetails(formId: string) {
+    if (formDetails[formId] || !formId) return;
+    setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, loading: true } }));
+    try {
+      const res = await fetch(`/api/salus/form/${formId}`);
+      const data = await res.json();
+      setFormDetails(prev => ({ ...prev, [formId]: {
+        missingFields: data.missingFields ?? [],
+        missingSig: data.missingSig ?? false,
+        signatures: data.signatures ?? [],
+        submittedBy: data.submittedBy ?? null,
+        createdBy: data.createdBy ?? null,
+        submittedOn: data.submittedOn ?? null,
+        createdAt: data.createdAt ?? null,
+        correctiveActionCount: data.correctiveActionCount ?? 0,
+        loading: false,
+      } }));
+    } catch {
+      setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, signatures: [], submittedBy: null, createdBy: null, submittedOn: null, createdAt: null, correctiveActionCount: 0, loading: false } }));
+    }
+  }
 
   useEffect(() => { loadAll(); }, []);
 
@@ -86,6 +121,7 @@ export default function PeoplePage() {
           const isDraft = (latest.status || "").toLowerCase() === "draft";
           formStatuses.push({
             formName,
+            formId: latest.id,
             submitted: !!latest.submitted_by,
             complete: isComplete,
             isDraft,
@@ -161,22 +197,95 @@ export default function PeoplePage() {
             </div>
             <div className="px-6 py-5 space-y-3">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide">Form Status</p>
-              {selectedPerson.forms.map((f) => (
-                <div key={f.formName} className={`rounded-xl border p-3 ${f.complete ? "bg-green-50 border-green-200" : f.isDraft ? "bg-red-50 border-red-200" : "bg-yellow-50 border-yellow-200"}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className={`font-semibold text-sm ${f.complete ? "text-green-800" : f.isDraft ? "text-red-800" : "text-yellow-800"}`}>
-                      {f.complete ? "✓" : f.isDraft ? "✗" : "⚠"} {f.formName}
-                    </p>
-                    {f.submittedAt && <p className="text-xs text-gray-400 shrink-0">{new Date(f.submittedAt).toLocaleDateString()}</p>}
+              {selectedPerson.forms.map((f) => {
+                const details = formDetails[f.formId];
+                const isExpanded = expandedForm === f.formId;
+                return (
+                  <div key={f.formName}
+                    onClick={() => {
+                      if (!f.complete) {
+                        setExpandedForm(isExpanded ? null : f.formId);
+                        if (!details && f.formId) fetchFormDetails(f.formId);
+                      }
+                    }}
+                    className={`rounded-xl border p-3 transition-all ${!f.complete ? "cursor-pointer" : ""} ${f.complete ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" : f.isDraft ? "bg-red-50 dark:bg-gray-700 border-red-200 dark:border-l-4 dark:border-red-500" : "bg-yellow-50 dark:bg-gray-700 border-yellow-200 dark:border-l-4 dark:border-yellow-500"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`font-semibold text-sm ${f.complete ? "text-green-800 dark:text-green-400" : f.isDraft ? "text-red-800 dark:text-gray-100" : "text-yellow-800 dark:text-gray-100"}`}>
+                        {f.complete ? "✓" : f.isDraft ? "✗" : "⚠"} {f.formName}
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {f.submittedAt && <p className="text-xs text-gray-400">{new Date(f.submittedAt).toLocaleDateString()}</p>}
+                        {!f.complete && <span className="text-xs text-gray-400">{isExpanded ? "▲" : "▼"}</span>}
+                      </div>
+                    </div>
+                    {!f.complete && f.problemLabel && (
+                      <p className={`text-xs mt-1 font-medium ${f.isDraft ? "text-red-600 dark:text-red-400" : "text-yellow-700 dark:text-yellow-400"}`}>⚑ {f.problemLabel}</p>
+                    )}
+                    {!f.complete && !isExpanded && (
+                      <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">Tap to see details</p>
+                    )}
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600 space-y-2">
+                        {details?.loading && <p className="text-xs text-gray-400 animate-pulse">Loading details...</p>}
+                        {details && !details.loading && (
+                          <>
+                            {/* Who & when */}
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="bg-gray-100 dark:bg-gray-600 rounded-lg p-2">
+                                <p className="text-xs text-gray-400 dark:text-gray-400 font-medium mb-0.5">CREATED BY</p>
+                                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{details.createdBy ?? "Unknown"}</p>
+                                {details.createdAt && <p className="text-xs text-gray-400">{new Date(details.createdAt).toLocaleDateString()}</p>}
+                              </div>
+                              <div className="bg-gray-100 dark:bg-gray-600 rounded-lg p-2">
+                                <p className="text-xs text-gray-400 dark:text-gray-400 font-medium mb-0.5">SUBMITTED BY</p>
+                                <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">{details.submittedBy ?? "Not submitted"}</p>
+                                {details.submittedOn && <p className="text-xs text-gray-400">{new Date(details.submittedOn).toLocaleDateString()}</p>}
+                              </div>
+                            </div>
+                            {/* Signature status */}
+                            {details.missingSig ? (
+                              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
+                                <p className="text-xs font-bold text-red-600 dark:text-red-400">✗ No signature — form was never signed off</p>
+                              </div>
+                            ) : details.signatures.length > 0 ? (
+                              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-2">
+                                <p className="text-xs font-bold text-green-700 dark:text-green-400 mb-1">✓ Signed by:</p>
+                                {details.signatures.map((s, i) => (
+                                  <p key={i} className="text-xs text-green-700 dark:text-green-400">
+                                    {s.name}{s.role ? ` (${s.role})` : ""}{s.date ? ` — ${new Date(s.date).toLocaleDateString()}` : ""}
+                                  </p>
+                                ))}
+                              </div>
+                            ) : null}
+                            {/* Corrective actions */}
+                            {details.correctiveActionCount > 0 && (
+                              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
+                                <p className="text-xs font-bold text-red-600 dark:text-red-400">⚑ {details.correctiveActionCount} corrective action{details.correctiveActionCount > 1 ? "s" : ""} open in SALUS</p>
+                              </div>
+                            )}
+                            {/* Missing fields */}
+                            {details.missingFields.length > 0 && (
+                              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
+                                <p className="text-xs font-bold text-red-600 dark:text-red-400 mb-1">MISSING REQUIRED FIELDS:</p>
+                                {details.missingFields.map((field) => (
+                                  <p key={field} className="text-xs text-red-600 dark:text-red-400">• {field}</p>
+                                ))}
+                              </div>
+                            )}
+                            {/* Generic message if nothing specific */}
+                            {details.missingFields.length === 0 && !details.missingSig && details.signatures.length === 0 && details.correctiveActionCount === 0 && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {f.isDraft ? "This form is saved as a draft and was never submitted. The person needs to open it in SALUS and complete it." : "This form was submitted but SALUS has flagged it as incomplete. Open it in SALUS to see what needs fixing."}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {!f.complete && f.problemLabel && (
-                    <p className={`text-xs mt-1 font-medium ${f.isDraft ? "text-red-600" : "text-yellow-700"}`}>⚑ {f.problemLabel}</p>
-                  )}
-                  {f.hasCorrectiveActions && (
-                    <p className="text-xs mt-1 font-bold text-red-700">{f.correctiveCount} corrective action{f.correctiveCount > 1 ? "s" : ""} must be resolved</p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
             <p className="text-xs text-gray-400 text-center pb-5">Tap outside to close</p>
           </div>
