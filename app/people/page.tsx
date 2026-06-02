@@ -67,7 +67,7 @@ export default function PeoplePage() {
 
   async function fetchFormDetails(formId: string) {
     if (formDetails[formId] || !formId) return;
-    setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, loading: true } }));
+    setFormDetails(prev => ({ ...prev, [formId]: { missingFields: [], missingSig: false, signatures: [], submittedBy: null, createdBy: null, submittedOn: null, createdAt: null, correctiveActionCount: 0, loading: true } }));
     try {
       const res = await fetch(`/api/salus/form/${formId}`);
       const data = await res.json();
